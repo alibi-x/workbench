@@ -335,7 +335,7 @@ select.input{cursor:pointer}
     <div class="topbar-nav-item" data-page="dashboard">数据看板</div>
   </div>
   <div class="topbar-sync">
-    <button class="notif-btn" id="notifBtn" title="通知设置">🔔</button>
+    <button class="notif-btn" id="notifBtn" title="通知设置" onclick="handleNotifClick()">🔔</button>
     <span class="sync-status" id="syncStatus"></span>
     <button class="sync-btn" id="syncBtn" onclick="syncMenu()">☁️ 同步</button>
   </div>
@@ -537,7 +537,8 @@ async function unsubscribePush(){if(!('serviceWorker' in navigator))return;const
 async function schedulePushNotification(text,remindAt){if(!PUSH_WORKER_URL)return null;const endpoint=DB.get('wb_push_endpoint','');const keysStr=DB.get('wb_push_keys','');if(!endpoint||!keysStr)return null;try{const res=await fetch(PUSH_WORKER_URL+'/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,remindAt,endpoint,keys:JSON.parse(keysStr)})});const data=await res.json();return data.id||null}catch(e){return null}}
 async function cancelPushNotification(notifId){if(!notifId||!PUSH_WORKER_URL)return;try{await fetch(PUSH_WORKER_URL+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:notifId})})}catch(e){}}
 function requestNotifPermission(){if(!('Notification' in window)){showToast('设备不支持通知');return}Notification.requestPermission().then(async function(perm){if(perm==='granted'){const ok=await subscribePush();if(ok)showToast('推送已开启，可以添加带提醒的待办了');updateNotifStatus()}else{showToast('通知权限未开启');updateNotifStatus()}})}
-function updateNotifStatus(){const btn=document.getElementById('notifBtn');if(!btn)return;btn.onclick=null;btn.classList.remove('active');if(!('Notification' in window)){btn.textContent='🔕';btn.title='设备不支持通知';return}if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',false);if(notifOn){btn.textContent='🔔';btn.classList.add('active');btn.title='通知已开启，点击关闭';btn.onclick=async function(){await unsubscribePush();showToast('通知已关闭，将不再收到推送');updateNotifStatus()}}else{btn.textContent='🔕';btn.title='通知已关闭，点击重新开启';btn.onclick=async function(){const ok=await subscribePush();if(ok){showToast('推送已重新开启');updateNotifStatus()}}}}else if(Notification.permission==='denied'){btn.textContent='🔕';btn.title='通知被拒绝';btn.onclick=function(){showToast('请在浏览器设置 → 站点权限 中重新允许通知')}}else{btn.textContent='🔕';btn.title='点击开启通知';btn.onclick=requestNotifPermission}}
+function handleNotifClick(){if(!('Notification' in window)){showToast('设备不支持通知');return}if(Notification.permission==='default'){requestNotifPermission()}else if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',false);if(notifOn){unsubscribePush().then(function(){showToast('通知已关闭');updateNotifStatus()})}else{subscribePush().then(function(ok){if(ok){showToast('推送已开启');updateNotifStatus()}})}}else{showToast('请在浏览器设置中重新允许通知')}}
+function updateNotifStatus(){const btn=document.getElementById('notifBtn');if(!btn)return;btn.classList.remove('active');if(!('Notification' in window)){btn.textContent='🔕';btn.title='设备不支持通知';return}if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',false);if(notifOn){btn.textContent='🔔';btn.classList.add('active');btn.title='通知已开启，点击关闭'}else{btn.textContent='🔕';btn.title='通知已关闭，点击重新开启'}}else if(Notification.permission==='denied'){btn.textContent='🔕';btn.title='通知被拒绝'}else{btn.textContent='🔕';btn.title='点击开启通知'}}
 function getSyncConfig(){return{url:DB.get('wb_sync_url',''),key:DB.get('wb_sync_key',''),userKey:DB.get('wb_sync_user','')}}
 function isSyncConfigured(){const c=getSyncConfig();return c.url&&c.key&&c.userKey}
 function getSyncHeaders(){const c=getSyncConfig();return{'apikey':c.key,'Authorization':'Bearer '+c.key,'Content-Type':'application/json'}}
@@ -685,7 +686,7 @@ document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();document.getElementById('imgModal').classList.remove('show')}});
 
 /* 初始化 */
-function init(){renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updateNotifStatus()}
+function init(){try{renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus()}catch(e){console.error('init error:',e)}try{updateNotifStatus()}catch(e){console.error('notif init error:',e)}}
 init();
 
 // Auto-resubscribe push if permission granted and was previously on
