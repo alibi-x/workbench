@@ -1,11 +1,13 @@
-importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
-const CACHE_VERSION = 'v1.4.7';
+importScripts("./OneSignalSW.js");
+const CACHE_VERSION = 'v1.4.8';
 const CACHE_NAME = 'workbench-' + CACHE_VERSION;
 const ASSETS = [
   './study-workbench.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './OneSignalSW.js',
+  './OneSignalSDK.page.es6.js'
 ];
 
 // 安装：预缓存核心文件
