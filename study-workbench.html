@@ -12,9 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
 <script>
-/* Web Push 配置 */
-const VAPID_PUBLIC_KEY='BEPKbi3RYtT7SHpJmpRE-_6vPoAvVYBxBnvhui10fqS02l3ctPhU6kNWDb45bLTmKHUpLiysfW4kL8l1n9V75vI';
-const PUSH_WORKER_URL='https://workbench-push.workbench-x.workers.dev';
+/* 企业微信推送通知（Cloudflare Worker Cron + 企业微信机器人 → 微信） */
 </script>
 <title>工作台</title>
 <style>
@@ -335,11 +333,11 @@ select.input{cursor:pointer}
     <div class="topbar-nav-item" data-page="dashboard">数据看板</div>
   </div>
   <div class="topbar-sync">
-    <button class="notif-btn" id="notifBtn" title="通知设置" onclick="handleNotifClick()">🔔</button>
-    <button class="notif-btn" id="testPushBtn" title="发送测试推送" onclick="sendTestPush()">📡</button>
+    <button class="notif-btn" id="notifBtn" title="推送设置" onclick="showPushConfig()">🔔</button>
+    <button class="notif-btn" id="testPushBtn" title="发送测试推送到微信" onclick="sendTestPush()">📡</button>
     <span class="sync-status" id="syncStatus"></span>
     <button class="sync-btn" id="syncBtn" onclick="syncMenu()">☁️ 同步</button>
-    <span style="color:#666;font-size:10px;margin-left:4px;">v2.5</span>
+    <span style="color:#666;font-size:10px;margin-left:4px;">v3.1</span>
   </div>
 </div>
 
@@ -532,58 +530,11 @@ const SUPABASE_URL='https://imibldfbeomnauorvkfj.supabase.co/rest/v1';
 const SUPABASE_KEY='sb_publishable_Z0aSS2T4R_0mOhxop_snzg_ADwPt-f3';
 const SYNC_KEYS=['wb_countdowns','wb_projects','wb_plans','wb_reviews','wb_shopping','wb_shop_budget','wb_links','wb_checkins','wb_events'];
 
-/* Web Push 通知 */
-function urlBase64ToUint8Array(base64String){const padding='='.repeat((4-base64String.length%4)%4);const base64=(base64String+padding).replace(/\-/g,'+').replace(/_/g,'/');const rawData=atob(base64);const outputArray=new Uint8Array(rawData.length);for(let i=0;i<rawData.length;++i)outputArray[i]=rawData.charCodeAt(i);return outputArray}
-async function subscribePush(){
-  try{
-    if(!('serviceWorker' in navigator)||!('PushManager' in window)){showToast('设备不支持推送通知');return false}
-    showToast('正在注册推送服务...');
-    let reg=await navigator.serviceWorker.getRegistration('./sw.js');
-    if(!reg){reg=await navigator.serviceWorker.register('./sw.js');await new Promise(r=>setTimeout(r,1000))}
-    let sub=await reg.pushManager.getSubscription();
-    if(sub){DB.set('wb_push_endpoint',sub.endpoint);DB.set('wb_notif_on',true);return true}
-    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
-    DB.set('wb_push_endpoint',sub.endpoint);
-    DB.set('wb_push_keys',JSON.stringify({p256dh:btoa(String.fromCharCode.apply(null,new Uint8Array(sub.getKey('p256dh')))),auth:btoa(String.fromCharCode.apply(null,new Uint8Array(sub.getKey('auth'))))}));
-    DB.set('wb_notif_on',true);
-    return true;
-  }catch(e){showToast('推送订阅失败：'+e.message);return false}
-}
-async function unsubscribePush(){if(!('serviceWorker' in navigator))return;const reg=await navigator.serviceWorker.getRegistration('./sw.js');if(!reg)return;const sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();DB.set('wb_notif_on',false);DB.set('wb_push_endpoint','')}
-async function schedulePushNotification(text,remindAt){if(!PUSH_WORKER_URL)return null;const endpoint=DB.get('wb_push_endpoint','');const keysStr=DB.get('wb_push_keys','');if(!endpoint||!keysStr)return null;try{const res=await fetch(PUSH_WORKER_URL+'/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,remindAt,endpoint,keys:JSON.parse(keysStr)})});const data=await res.json();return data.id||null}catch(e){return null}}
-async function cancelPushNotification(notifId){if(!notifId||!PUSH_WORKER_URL)return;try{await fetch(PUSH_WORKER_URL+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:notifId})})}catch(e){}}
-function requestNotifPermission(){if(!('Notification' in window)){showToast('设备不支持通知');return}Notification.requestPermission().then(async function(perm){if(perm==='granted'){const ok=await subscribePush();if(ok)showToast('推送已开启，可以添加带提醒的待办了');updateNotifStatus()}else{showToast('通知权限未开启');updateNotifStatus()}})}
-function handleNotifClick(){
-  try{
-    if(!('Notification' in window)){showToast('设备不支持通知');return}
-    var perm=Notification.permission;
-    if(perm==='default'){requestNotifPermission()}
-    else if(perm==='granted'){
-      var notifOn=DB.get('wb_notif_on',false);
-      if(notifOn){unsubscribePush().then(function(){showToast('通知已关闭');updateNotifStatus()})}
-      else{subscribePush().then(function(ok){if(ok){showToast('推送已开启');updateNotifStatus()}})}
-    }else{showToast('通知被拒绝，请到浏览器设置中重新允许')}
-  }catch(e){showToast('铃铛错误：'+e.message)}
-}
-function updateNotifStatus(){const btn=document.getElementById('notifBtn');if(!btn)return;btn.classList.remove('active');if(!('Notification' in window)){btn.textContent='🔕';btn.title='设备不支持通知';return}if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',false);if(notifOn){btn.textContent='🔔';btn.classList.add('active');btn.title='通知已开启，点击关闭'}else{btn.textContent='🔕';btn.title='通知已关闭，点击重新开启'}}else if(Notification.permission==='denied'){btn.textContent='🔕';btn.title='通知被拒绝'}else{btn.textContent='🔕';btn.title='点击开启通知'}}
-async function sendTestPush(){
-  var endpoint=DB.get('wb_push_endpoint','');
-  var keysStr=DB.get('wb_push_keys','');
-  if(!endpoint||!keysStr){showToast('请先点击🔔开启推送');return}
-  if(!PUSH_WORKER_URL){showToast('推送服务未配置');return}
-  showToast('正在发送测试推送...');
-  try{
-    var keys=JSON.parse(keysStr);
-    var res=await fetch(PUSH_WORKER_URL+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'测试通知 - 这是一条推送消息',endpoint:endpoint,keys:keys})});
-    var data=await res.json();
-    if(data.ok){
-      showToast('推送已发送(status='+data.status+') body='+String(data.body).substring(0,80));
-      console.log('[PushTest] FCM response status:',data.status,'body:',data.body);
-    }else{
-      showToast('推送失败：status='+data.status+' '+(data.error||data.body||'').substring(0,80));
-    }
-  }catch(e){showToast('请求失败：'+e.message)}
-}
+/* 企业微信推送通知（Worker Cron 每分钟检查到期待办 → 企业微信机器人推送到微信） */
+function getPushConfig(){return{workerUrl:DB.get('wb_push_worker_url','')}}
+function showPushConfig(){const c=getPushConfig();showModal({title:'🔔 推送设置',body:`<div class="form-group"><label>Worker URL</label><input type="text" class="input" id="pushWorkerUrl" value="${escapeHtml(c.workerUrl)}" placeholder="https://your-worker.workers.dev"></div><p style="font-size:12px;color:var(--text-muted);margin-top:8px;">填写你的 Cloudflare Worker 地址。Worker 每分钟检查到期待办，通过企业微信机器人推送到微信。</p><p style="font-size:12px;color:var(--text-muted);margin-top:4px;">提醒：添加带提醒的待办后会自动同步到云端，Worker 才能读取到期待办。</p>`,actions:[{text:'取消',cls:'btn-secondary',onClick:closeModal},{text:'保存',cls:'btn-primary',onClick:()=>{const u=document.getElementById('pushWorkerUrl').value.trim().replace(/\/$/,'');DB.set('wb_push_worker_url',u);closeModal();updatePushStatus();showToast('推送配置已保存')}}]})}
+function updatePushStatus(){var btn=document.getElementById('notifBtn');if(!btn)return;var c=getPushConfig();if(c.workerUrl){btn.classList.add('active');btn.title='推送已配置，点击修改'}else{btn.classList.remove('active');btn.title='点击配置推送'}}
+async function sendTestPush(){const c=getPushConfig();if(!c.workerUrl){showToast('请先点击🔔配置 Worker URL');return}var btn=document.getElementById('testPushBtn');var old=btn.textContent;btn.textContent='⏳';btn.disabled=true;try{const resp=await fetch(c.workerUrl+'/test',{method:'POST'});const data=await resp.json();if(data.ok){showToast('✅ 测试消息已发送到微信，请查看')}else{showToast('❌ 推送失败：'+(data.error||'未知错误'))}}catch(e){showToast('❌ 请求失败：'+e.message)}finally{btn.textContent=old;btn.disabled=false}}
 function getSyncConfig(){return{url:DB.get('wb_sync_url',''),key:DB.get('wb_sync_key',''),userKey:DB.get('wb_sync_user','')}}
 function isSyncConfigured(){const c=getSyncConfig();return c.url&&c.key&&c.userKey}
 function getSyncHeaders(){const c=getSyncConfig();return{'apikey':c.key,'Authorization':'Bearer '+c.key,'Content-Type':'application/json'}}
@@ -623,9 +574,9 @@ function delSubTask(pi,si){if(!confirm('确定删除该分支任务？'))return;
 /* 每日计划 */
 let plans=DB.get('wb_plans',{});let planDate=todayKey();
 function renderPlans(){const t=document.getElementById('mainTitle');const d=document.getElementById('mainDate');let titleText=planDate===todayKey()?'今日计划':`${planDate.replace(/-/g,'/')} 计划`;if(activeProject!==null&&projects[activeProject]){titleText+=` · ${projects[activeProject].name}`;if(activeSubTask!=null&&projects[activeProject].subTasks&&projects[activeProject].subTasks[activeSubTask])titleText+=` / ${projects[activeProject].subTasks[activeSubTask].name}`}t.textContent=titleText;const dt=new Date(planDate+'T00:00:00');const wd=['日','一','二','三','四','五','六'];d.textContent=`${dt.getFullYear()}年${dt.getMonth()+1}月${dt.getDate()}日 星期${wd[dt.getDay()]}`;const dp=plans[planDate]||[];const list=document.getElementById('planList');let items=dp.map((p,i)=>({p,i}));if(activeProject!==null){items=items.filter(({p})=>{if(p.projectIdx!==activeProject)return false;if(activeSubTask!=null&&p.subIdx!==activeSubTask)return false;return true})}if(items.length===0){const msg=activeProject!==null?'该项目下暂无计划':'暂无计划，开始添加吧';list.innerHTML=`<div class="empty-state"><span class="icon">📋</span>${msg}</div>`;return}list.innerHTML=items.map(({p,i})=>{const pn=p.projectIdx!=null&&projects[p.projectIdx]?projects[p.projectIdx].name:'';const sn=p.projectIdx!=null&&p.subIdx!=null&&projects[p.projectIdx]&&projects[p.projectIdx].subTasks[p.subIdx]?projects[p.projectIdx].subTasks[p.subIdx].name:'';const tag=pn?`<span class="plan-tag">${escapeHtml(pn)}${sn?' · '+escapeHtml(sn):''}</span>`:'';const remindHtml=p.remindAt?`<span class="plan-remind" title="提醒 ${p.remindAt.replace('T',' ')}">🔔${p.remindAt.substring(11,16)}</span>`:'';return`<div class="plan-item ${p.done?'done':''}"><div class="plan-checkbox ${p.done?'checked':''}" onclick="togglePlan(${i})"></div><span class="plan-text">${escapeHtml(p.text)}</span>${tag}${remindHtml}<button class="plan-delete" onclick="delPlan(${i})">×</button></div>`}).join('')}
-function addPlan(){const input=document.getElementById('planInput');const remindInput=document.getElementById('planRemindAt');const ps=document.getElementById('planProject');const text=input.value.trim();if(!text){showToast('请输入内容');return}if(!plans[planDate])plans[planDate]=[];const pIdx=ps.value?parseInt(ps.value):(activeProject!==null?activeProject:null);const sIdx=ps.value?null:(activeSubTask!=null?activeSubTask:null);const remindAt=remindInput?remindInput.value:null;const p={text,done:false,projectIdx:pIdx,subIdx:sIdx,remindAt:remindAt,notifId:null};plans[planDate].push(p);DB.set('wb_plans',plans);input.value='';if(remindInput)remindInput.value='';renderPlans();if(remindAt){schedulePushNotification(text,remindAt).then(nid=>{if(nid){p.notifId=nid;DB.set('wb_plans',plans);showToast('已添加，将在'+remindAt.replace('T',' ')+'提醒你')}else{showToast('已添加（推送服务未配置，提醒暂不可用）')}})}else{showToast('已添加')}}
-function togglePlan(i){const p=plans[planDate][i];p.done=!p.done;if(p.done&&p.notifId){cancelPushNotification(p.notifId);p.notifId=null}DB.set('wb_plans',plans);renderPlans()}
-function delPlan(i){const p=plans[planDate][i];if(p&&p.notifId)cancelPushNotification(p.notifId);plans[planDate].splice(i,1);if(plans[planDate].length===0)delete plans[planDate];DB.set('wb_plans',plans);renderPlans()}
+function addPlan(){const input=document.getElementById('planInput');const remindInput=document.getElementById('planRemindAt');const ps=document.getElementById('planProject');const text=input.value.trim();if(!text){showToast('请输入内容');return}if(!plans[planDate])plans[planDate]=[];const pIdx=ps.value?parseInt(ps.value):(activeProject!==null?activeProject:null);const sIdx=ps.value?null:(activeSubTask!=null?activeSubTask:null);const remindAt=remindInput?remindInput.value:null;const p={text,done:false,projectIdx:pIdx,subIdx:sIdx,remindAt:remindAt};plans[planDate].push(p);DB.set('wb_plans',plans);input.value='';if(remindInput)remindInput.value='';renderPlans();if(remindAt){if(isSyncConfigured()){syncUpload();showToast('已添加，正在同步到云端，到时微信会提醒你')}else{showToast('已添加。请配置☁️同步，Worker才能推送提醒')}}else{showToast('已添加')}}
+function togglePlan(i){const p=plans[planDate][i];p.done=!p.done;if(p.done)p.notified=true;DB.set('wb_plans',plans);renderPlans();if(p.remindAt&&isSyncConfigured())syncUpload()}
+function delPlan(i){var hadRemind=plans[planDate][i]&&plans[planDate][i].remindAt;plans[planDate].splice(i,1);if(plans[planDate].length===0)delete plans[planDate];DB.set('wb_plans',plans);renderPlans();if(hadRemind&&isSyncConfigured())syncUpload()}
 function prevDay(){planDate=addDays(planDate,-1);renderPlans()}
 function nextDay(){planDate=addDays(planDate,1);renderPlans()}
 
@@ -731,11 +682,8 @@ document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();document.getElementById('imgModal').classList.remove('show')}});
 
 /* 初始化 */
-function init(){try{renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus()}catch(e){console.error('init error:',e)}try{updateNotifStatus()}catch(e){console.error('notif init error:',e)}}
+function init(){try{renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updatePushStatus()}catch(e){console.error('init error:',e)}}
 init();
-
-// Auto-resubscribe push if permission granted and was previously on
-setTimeout(async function(){if(!('Notification' in window)||Notification.permission!=='granted'||!DB.get('wb_notif_on',false))return;if(!('serviceWorker' in navigator)||!('PushManager' in window))return;try{const reg=await navigator.serviceWorker.getRegistration('./sw.js');if(!reg)return;const sub=await reg.pushManager.getSubscription();if(!sub){const ok=await subscribePush();if(ok)updateNotifStatus()}else{DB.set('wb_push_endpoint',sub.endpoint)}}catch(e){}},3000);
 
 // Service Worker 注册（PWA 离线缓存 + Web Push 推送）
 if('serviceWorker' in navigator){
