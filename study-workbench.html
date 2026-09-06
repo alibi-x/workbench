@@ -338,6 +338,7 @@ select.input{cursor:pointer}
     <button class="notif-btn" id="notifBtn" title="通知设置" onclick="handleNotifClick()">🔔</button>
     <span class="sync-status" id="syncStatus"></span>
     <button class="sync-btn" id="syncBtn" onclick="syncMenu()">☁️ 同步</button>
+    <span style="color:#666;font-size:10px;margin-left:4px;">v2.1</span>
   </div>
 </div>
 
@@ -694,15 +695,30 @@ setTimeout(async function(){if(!('Notification' in window)||Notification.permiss
 
 // Service Worker 注册（PWA 离线缓存 + Web Push 推送）
 if('serviceWorker' in navigator){
-  // 清理旧的 push/ scope service worker
+  // 强制清理所有旧版 Service Worker 和缓存
   navigator.serviceWorker.getRegistrations().then(function(regs){
     regs.forEach(function(reg){
-      if(reg.scope && reg.scope.indexOf('/push/')>=0){
-        console.log('[SW] Unregistering old push SW:', reg.scope);
+      var swVer='unknown';
+      try{swVer=reg.active&&reg.active.scriptURL?reg.active.scriptURL:''}catch(e){}
+      // 如果是旧版 SW（包含 OneSignalSW 或版本不是 v2），先注销
+      if(swVer.indexOf('OneSignalSW')>=0 || reg.scope.indexOf('/push/')>=0){
+        console.log('[SW] Unregistering old SW:', swVer || reg.scope);
         reg.unregister();
       }
     });
+    // 清理所有旧缓存
+    if(window.caches){
+      caches.keys().then(function(names){
+        names.forEach(function(name){
+          if(name!=='workbench-v2.0.0'){
+            console.log('[SW] Deleting old cache:', name);
+            caches.delete(name);
+          }
+        });
+      });
+    }
   });
+  // 注册新 SW
   navigator.serviceWorker.register('./sw.js').then(function(reg){
     reg.update();
     reg.addEventListener('updatefound',function(){
