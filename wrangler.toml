@@ -6,19 +6,17 @@ compatibility_date = "2024-01-01"
 [triggers]
 crons = ["* * * * *"]
 
-# KV namespace for storing scheduled notifications
-# Create with: wrangler kv:namespace create NOTIFICATIONS
-# Then paste the id below
-[[kv_namespaces]]
-binding = "NOTIFICATIONS"
-id = "b857192b7ea64586b24bac2bb3d2bf34"
-
-# Environment variables (non-secret, safe to commit)
-[vars]
-VAPID_PUBLIC_KEY = "BEPKbi3RYtT7SHpJmpRE-_6vPoAvVYBxBnvhui10fqS02l3ctPhU6kNWDb45bLTmKHUpLiysfW4kL8l1n9V75vI"
-VAPID_SUBJECT = "980685077@qq.com"
-
-# VAPID_PRIVATE_KEY is a SECRET - do NOT put it here!
-# Set it via: wrangler secret put VAPID_PRIVATE_KEY
-# Value to paste when prompted:
-# MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQge4RUtc8jcoMebuvD6zgC9tM5IwjiauJ-D5DVZAqU3hShRANCAARDym4t0WLU-0h6SZqURPv-rz6AL1WAcQZ74botdH6ktNpd3LT4VOpDVg2-OWy05ih1KS4srH1uJC_JdZ_Ve-by
+# 所有配置都通过 wrangler secret put 设置（不在 toml 里暴露）
+# 依次执行以下命令设置 secrets：
+#
+# wrangler secret put SUPABASE_URL
+#   输入: https://imibldfbeomnauorvkfj.supabase.co/rest/v1
+#
+# wrangler secret put SUPABASE_KEY
+#   输入: sb_publishable_Z0aSS2T4R_0mOhxop_snzg_ADwPt-f3
+#
+# wrangler secret put SUPABASE_USERKEY
+#   输入: 你在工作台同步设置中配置的同步密码
+#
+# wrangler secret put WECOM_WEBHOOK
+#   输入: 企业微信群机器人 Webhook URL，如 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
