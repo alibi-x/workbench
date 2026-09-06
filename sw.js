@@ -1,4 +1,5 @@
-const CACHE_VERSION = 'v1.4.2';
+importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+const CACHE_VERSION = 'v1.4.3';
 const CACHE_NAME = 'workbench-' + CACHE_VERSION;
 const ASSETS = [
   './study-workbench.html',

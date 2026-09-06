@@ -18,8 +18,8 @@
     var sitePath = window.location.pathname.replace(/\/[^\/]*$/, '/');
     OneSignal.init({
       appId: "4b022e74-293a-4411-947c-16352cbbd53a",
-      serviceWorkerPath: "push/OneSignalSDKWorker.js",
-      serviceWorkerParam: { scope: sitePath + "push/" },
+      serviceWorkerPath: "sw.js",
+      serviceWorkerParam: { scope: sitePath },
       notifyButton: { enable: false },
       welcomeNotification: { disable: true }
     });
