@@ -14,15 +14,29 @@
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.__notifDebug = { events: [], swRegs: [], errors: [] };
+  window.__notifLog = function(msg) {
+    var t = new Date().toLocaleTimeString();
+    window.__notifDebug.events.push(t + ': ' + msg);
+    console.log('[NotifDebug] ' + msg);
+  };
+  __notifLog('Page loaded, OneSignalSDK.page.js script tag present');
   OneSignalDeferred.push(function(OneSignal) {
+    __notifLog('OneSignalDeferred callback fired - SDK is ready');
     var sitePath = window.location.pathname.replace(/\/[^\/]*$/, '/');
-    OneSignal.init({
-      appId: "4b022e74-293a-4411-947c-16352cbbd53a",
-      serviceWorkerPath: "sw.js",
-      serviceWorkerParam: { scope: sitePath },
-      notifyButton: { enable: false },
-      welcomeNotification: { disable: true }
-    });
+    __notifLog('Calling OneSignal.init, sitePath=' + sitePath + ', SW=sw.js, scope=' + sitePath);
+    try {
+      OneSignal.init({
+        appId: "4b022e74-293a-4411-947c-16352cbbd53a",
+        serviceWorkerPath: "sw.js",
+        serviceWorkerParam: { scope: sitePath },
+        notifyButton: { enable: false },
+        welcomeNotification: { disable: true }
+      });
+      __notifLog('OneSignal.init() called successfully');
+    } catch(e) {
+      __notifLog('OneSignal.init() ERROR: ' + e.message);
+    }
   });
 </script>
 <title>工作台</title>
@@ -141,6 +155,14 @@ input,textarea,select,.plan-text,.review-item-title,.review-text-content,.sideba
 .notif-btn{background:transparent;border:none;color:var(--navy-300);cursor:pointer;font-size:16px;padding:4px 8px;border-radius:var(--radius);transition:var(--transition);display:flex;align-items:center}
 .notif-btn:hover{color:#fff;background:rgba(255,255,255,.08)}
 .notif-btn.active{color:var(--blue-300)}
+.debug-btn{background:transparent;border:none;color:var(--navy-300);cursor:pointer;font-size:14px;padding:4px 8px;border-radius:var(--radius);transition:var(--transition)}
+.debug-btn:hover{color:#fff;background:rgba(255,255,255,.08)}
+.debug-modal{max-width:500px!important}
+.debug-modal .modal-body{max-height:60vh;overflow-y:auto}
+.debug-log{font-family:monospace;font-size:12px;line-height:1.8;color:var(--text);background:var(--navy-50);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-all}
+.debug-log .err{color:var(--danger)}
+.debug-log .ok{color:var(--success)}
+.debug-log .warn{color:var(--warning)}
 .empty-state{text-align:center;padding:48px 20px;color:var(--text-muted)}
 .empty-state .icon{font-size:40px;display:block;margin-bottom:12px;opacity:.5}
 
@@ -345,6 +367,7 @@ select.input{cursor:pointer}
   </div>
   <div class="topbar-sync">
     <button class="notif-btn" id="notifBtn" title="通知设置">🔔</button>
+    <button class="debug-btn" id="debugBtn" onclick="showNotifDebug()" title="推送诊断">🔍</button>
     <span class="sync-status" id="syncStatus"></span>
     <button class="sync-btn" id="syncBtn" onclick="syncMenu()">☁️ 同步</button>
   </div>
@@ -545,7 +568,10 @@ const ONESIGNAL_REST_KEY='os_v2_app_jmbc45bjhjcbdfd4cy2szo6vhj7aucrzh6vudimzvhod
 function getOneSignalSubId(){return new Promise(resolve=>{if(!window.OneSignalDeferred){resolve(null);return}OneSignalDeferred.push(async function(OneSignal){let subId=OneSignal.User.PushSubscription.id;if(subId){resolve(subId);return}for(let i=0;i<24;i++){await new Promise(r=>setTimeout(r,500));subId=OneSignal.User.PushSubscription.id;if(subId){resolve(subId);return}}resolve(null)})})}
 async function schedulePushNotification(text,remindAt){const subId=await getOneSignalSubId();if(!subId){return null}const dt=new Date(remindAt);const sendAfter=dt.getUTCFullYear()+'-'+String(dt.getUTCMonth()+1).padStart(2,'0')+'-'+String(dt.getUTCDate()).padStart(2,'0')+' '+String(dt.getUTCHours()).padStart(2,'0')+':'+String(dt.getUTCMinutes()).padStart(2,'0')+':00';try{const res=await fetch('https://api.onesignal.com/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Key '+ONESIGNAL_REST_KEY},body:JSON.stringify({app_id:ONESIGNAL_APP_ID,target_channel:'push',headings:{en:'⏰ 待办提醒'},contents:{en:text},send_after:sendAfter,include_subscription_ids:[subId]})});const data=await res.json();return data.id||null}catch(e){return null}}
 async function cancelPushNotification(notifId){if(!notifId)return;try{await fetch('https://api.onesignal.com/notifications/'+notifId+'?app_id='+ONESIGNAL_APP_ID,{method:'DELETE',headers:{'Authorization':'Key '+ONESIGNAL_REST_KEY}})}catch(e){}}
-function connectPushService(){if(!window.OneSignalDeferred){showToast('推送服务未加载，请刷新页面重试');return}showToast('正在连接推送服务...');var done=false;var hardTimer=setTimeout(function(){if(!done){done=true;showToast('连接超时，请清除站点数据后重试（见说明）');updateNotifStatus()}},16000);OneSignalDeferred.push(function(OneSignal){console.log('[OneSignal] SDK ready, calling optIn...');try{OneSignal.User.PushSubscription.optIn()}catch(e){console.log('[OneSignal] optIn error:',e)}var attempts=0;var poll=setInterval(function(){attempts++;var subId=null;try{subId=OneSignal.User.PushSubscription.id}catch(e){}console.log('[OneSignal] poll #'+attempts+' subId='+subId);if(subId){done=true;clearTimeout(hardTimer);clearInterval(poll);DB.set('wb_notif_on',true);showToast('推送服务连接成功！可以添加带提醒的待办了');updateNotifStatus()}else if(attempts>=24){clearInterval(poll);if(!done){done=true;clearTimeout(hardTimer);console.log('[OneSignal] timed out. permission='+Notification.permission+' optedIn='+(OneSignal.User.PushSubscription.optedIn));showToast('连接超时，请清除站点数据后重试');updateNotifStatus()}}},500)})}
+function connectPushService(){if(!window.OneSignalDeferred){__notifLog('connectPushService: OneSignalDeferred not found');showToast('推送服务未加载，请刷新页面重试');return}__notifLog('connectPushService: starting...');showToast('正在连接推送服务...');var done=false;var hardTimer=setTimeout(function(){if(!done){done=true;__notifLog('connectPushService: TIMEOUT after 16s');showNotifDebug()}},16000);OneSignalDeferred.push(function(OneSignal){__notifLog('connectPushService: inside OneSignalDeferred callback');__notifLog('Notification.permission='+Notification.permission);try{var subBefore=OneSignal.User.PushSubscription.id;__notifLog('subId before optIn='+(subBefore||'null'));__notifLog('optedIn before='+(OneSignal.User.PushSubscription.optedIn));}catch(e){__notifLog('Error reading subscription state: '+e.message)}__notifLog('Calling optIn()...');try{var optInResult=OneSignal.User.PushSubscription.optIn();__notifLog('optIn() returned: '+(optInResult&&optInResult.then?'Promise':'sync'))}catch(e){__notifLog('optIn() ERROR: '+e.message)}var attempts=0;var poll=setInterval(function(){attempts++;var subId=null;try{subId=OneSignal.User.PushSubscription.id}catch(e){}if(attempts<=3||attempts%6===0)__notifLog('poll #'+attempts+' subId='+(subId||'null'));if(subId){done=true;clearTimeout(hardTimer);clearInterval(poll);DB.set('wb_notif_on',true);__notifLog('SUCCESS! subId='+subId);showToast('推送服务连接成功！可以添加带提醒的待办了');updateNotifStatus()}else if(attempts>=24){clearInterval(poll);if(!done){done=true;clearTimeout(hardTimer);try{__notifLog('TIMED OUT. permission='+Notification.permission+' optedIn='+(OneSignal.User.PushSubscription.optedIn))}catch(e){}showNotifDebug()}}},500)})}
+function showNotifDebug(){var d=window.__notifDebug||{events:[]};var swInfo='Checking...';if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(regs){d.swRegs=regs.map(function(r){return{scope:r.scope,active:r.active?'active':'inactive',scriptURL:r.active?r.active.scriptURL:'none'}});__notifLog('SW registrations: '+regs.length);regs.forEach(function(r){__notifLog('  SW scope='+r.scope+' script='+r.active.scriptURL)});renderDebugModal()})}else{__notifLog('navigator.serviceWorker not supported')}renderDebugModal()}
+function renderDebugModal(){var d=window.__notifDebug||{events:[],swRegs:[],errors:[]};var html='<div class="debug-log">';html+='<b>--- OneSignal Diagnostic ---</b>\n';html+='SDK loaded: '+(window.OneSignal?'YES':'NO (OneSignalDeferred='+!!window.OneSignalDeferred+')')+'\n';html+='Notification.permission: '+('Notification' in window?Notification.permission:'not supported')+'\n';html+='Page URL: '+window.location.href+'\n';html+='\n<b>--- Service Workers ---</b>\n';if(d.swRegs&&d.swRegs.length>0){d.swRegs.forEach(function(r){html+='scope: '+r.scope+'\n  script: '+r.scriptURL+'\n  state: '+r.active+'\n'})}else{html+='(not checked yet - click again)\n'}html+='\n<b>--- Event Log ---</b>\n';d.events.forEach(function(e){var cls='';if(e.indexOf('ERROR')>=0||e.indexOf('TIMEOUT')>=0||e.indexOf('TIMED')>=0)cls='err';else if(e.indexOf('SUCCESS')>=0)cls='ok';else if(e.indexOf('WARNING')>=0||e.indexOf('warn')>=0)cls='warn';html+='<span class="'+cls+'">'+e+'</span>\n'});html+='</div>';html+='<div style="margin-top:12px;text-align:center;"><button class="btn btn-primary" onclick="copyDebugLog()" style="font-size:12px;">复制诊断信息</button></div>';showModal({title:'推送诊断面板',body:html,actions:[{text:'关闭',cls:'btn-secondary',onClick:closeModal}]})}
+function copyDebugLog(){var d=window.__notifDebug||{events:[]};var text='=== OneSignal Diagnostic ===\n';text+='SDK loaded: '+(window.OneSignal?'YES':'NO')+'\n';text+='Notification.permission: '+('Notification' in window?Notification.permission:'not supported')+'\n';text+='Page URL: '+window.location.href+'\n';text+='\n=== Service Workers ===\n';if(d.swRegs&&d.swRegs.length>0){d.swRegs.forEach(function(r){text+='scope: '+r.scope+' | script: '+r.scriptURL+' | state: '+r.active+'\n'})}else{text+='(not checked)\n'}text+='\n=== Event Log ===\n';d.events.forEach(function(e){text+=e+'\n'});if(navigator.clipboard){navigator.clipboard.writeText(text).then(function(){showToast('已复制到剪贴板')})}else{var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('已复制到剪贴板')}}
 function requestNotifPermission(){if(!('Notification' in window)){showToast('设备不支持通知');return}Notification.requestPermission().then(function(perm){if(perm==='granted'){connectPushService()}else{showToast('通知权限未开启');updateNotifStatus()}})}
 function updateNotifStatus(){const btn=document.getElementById('notifBtn');if(!btn)return;btn.onclick=null;btn.classList.remove('active');if(!('Notification' in window)){btn.textContent='🔕';btn.title='设备不支持通知';return}if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',true);if(notifOn){btn.textContent='🔔';btn.classList.add('active');btn.title='通知已开启，点击关闭';btn.onclick=function(){if(window.OneSignalDeferred){OneSignalDeferred.push(function(OneSignal){OneSignal.User.PushSubscription.optOut()})}DB.set('wb_notif_on',false);showToast('通知已关闭，将不再收到推送');updateNotifStatus()}}else{btn.textContent='🔕';btn.title='通知已关闭，点击重新开启';btn.onclick=connectPushService}}else if(Notification.permission==='denied'){btn.textContent='🔕';btn.title='通知被拒绝';btn.onclick=function(){showToast('请在浏览器设置 → 站点权限 中重新允许通知')}}else{btn.textContent='🔕';btn.title='点击开启通知';btn.onclick=requestNotifPermission}}
 function getSyncConfig(){return{url:DB.get('wb_sync_url',''),key:DB.get('wb_sync_key',''),userKey:DB.get('wb_sync_user','')}}
