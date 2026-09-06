@@ -339,7 +339,7 @@ select.input{cursor:pointer}
     <button class="notif-btn" id="testPushBtn" title="发送测试推送" onclick="sendTestPush()">📡</button>
     <span class="sync-status" id="syncStatus"></span>
     <button class="sync-btn" id="syncBtn" onclick="syncMenu()">☁️ 同步</button>
-    <span style="color:#666;font-size:10px;margin-left:4px;">v2.4</span>
+    <span style="color:#666;font-size:10px;margin-left:4px;">v2.5</span>
   </div>
 </div>
 
@@ -576,8 +576,12 @@ async function sendTestPush(){
     var keys=JSON.parse(keysStr);
     var res=await fetch(PUSH_WORKER_URL+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'测试通知 - 这是一条推送消息',endpoint:endpoint,keys:keys})});
     var data=await res.json();
-    if(data.ok){showToast('测试推送已发送！请查看通知栏')}
-    else{showToast('推送失败：'+(data.error||data.body||'status '+data.status))}
+    if(data.ok){
+      showToast('推送已发送(status='+data.status+') body='+String(data.body).substring(0,80));
+      console.log('[PushTest] FCM response status:',data.status,'body:',data.body);
+    }else{
+      showToast('推送失败：status='+data.status+' '+(data.error||data.body||'').substring(0,80));
+    }
   }catch(e){showToast('请求失败：'+e.message)}
 }
 function getSyncConfig(){return{url:DB.get('wb_sync_url',''),key:DB.get('wb_sync_key',''),userKey:DB.get('wb_sync_user','')}}
