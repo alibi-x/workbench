@@ -12,9 +12,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
 <script>
-/* 原生 Web Push 配置 */
+/* Web Push 配置 */
 const VAPID_PUBLIC_KEY='BEPKbi3RYtT7SHpJmpRE-_6vPoAvVYBxBnvhui10fqS02l3ctPhU6kNWDb45bLTmKHUpLiysfW4kL8l1n9V75vI';
-const PUSH_WORKER_URL='https://workbench-x.workers.dev'; /* 部署 Cloudflare Worker 后填入 URL，如 https://your-worker.workers.dev */
+const PUSH_WORKER_URL='https://workbench-x.workers.dev';
 </script>
 <title>工作台</title>
 <style>
@@ -336,9 +336,10 @@ select.input{cursor:pointer}
   </div>
   <div class="topbar-sync">
     <button class="notif-btn" id="notifBtn" title="通知设置" onclick="handleNotifClick()">🔔</button>
+    <button class="notif-btn" id="testPushBtn" title="发送测试推送" onclick="sendTestPush()">📡</button>
     <span class="sync-status" id="syncStatus"></span>
     <button class="sync-btn" id="syncBtn" onclick="syncMenu()">☁️ 同步</button>
-    <span style="color:#666;font-size:10px;margin-left:4px;">v2.2</span>
+    <span style="color:#666;font-size:10px;margin-left:4px;">v2.4</span>
   </div>
 </div>
 
@@ -531,17 +532,14 @@ const SUPABASE_URL='https://imibldfbeomnauorvkfj.supabase.co/rest/v1';
 const SUPABASE_KEY='sb_publishable_Z0aSS2T4R_0mOhxop_snzg_ADwPt-f3';
 const SYNC_KEYS=['wb_countdowns','wb_projects','wb_plans','wb_reviews','wb_shopping','wb_shop_budget','wb_links','wb_checkins','wb_events'];
 
-/* 原生 Web Push 通知 */
+/* Web Push 通知 */
 function urlBase64ToUint8Array(base64String){const padding='='.repeat((4-base64String.length%4)%4);const base64=(base64String+padding).replace(/\-/g,'+').replace(/_/g,'/');const rawData=atob(base64);const outputArray=new Uint8Array(rawData.length);for(let i=0;i<rawData.length;++i)outputArray[i]=rawData.charCodeAt(i);return outputArray}
 async function subscribePush(){
   try{
     if(!('serviceWorker' in navigator)||!('PushManager' in window)){showToast('设备不支持推送通知');return false}
     showToast('正在注册推送服务...');
     let reg=await navigator.serviceWorker.getRegistration('./sw.js');
-    if(!reg){
-      reg=await navigator.serviceWorker.register('./sw.js');
-      await new Promise(r=>setTimeout(r,1000));
-    }
+    if(!reg){reg=await navigator.serviceWorker.register('./sw.js');await new Promise(r=>setTimeout(r,1000))}
     let sub=await reg.pushManager.getSubscription();
     if(sub){DB.set('wb_push_endpoint',sub.endpoint);DB.set('wb_notif_on',true);return true}
     sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
@@ -549,10 +547,7 @@ async function subscribePush(){
     DB.set('wb_push_keys',JSON.stringify({p256dh:btoa(String.fromCharCode.apply(null,new Uint8Array(sub.getKey('p256dh')))),auth:btoa(String.fromCharCode.apply(null,new Uint8Array(sub.getKey('auth'))))}));
     DB.set('wb_notif_on',true);
     return true;
-  }catch(e){
-    showToast('推送订阅失败：'+e.message);
-    return false;
-  }
+  }catch(e){showToast('推送订阅失败：'+e.message);return false}
 }
 async function unsubscribePush(){if(!('serviceWorker' in navigator))return;const reg=await navigator.serviceWorker.getRegistration('./sw.js');if(!reg)return;const sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();DB.set('wb_notif_on',false);DB.set('wb_push_endpoint','')}
 async function schedulePushNotification(text,remindAt){if(!PUSH_WORKER_URL)return null;const endpoint=DB.get('wb_push_endpoint','');const keysStr=DB.get('wb_push_keys','');if(!endpoint||!keysStr)return null;try{const res=await fetch(PUSH_WORKER_URL+'/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,remindAt,endpoint,keys:JSON.parse(keysStr)})});const data=await res.json();return data.id||null}catch(e){return null}}
@@ -562,24 +557,29 @@ function handleNotifClick(){
   try{
     if(!('Notification' in window)){showToast('设备不支持通知');return}
     var perm=Notification.permission;
-    showToast('通知状态：'+perm);
-    if(perm==='default'){
-      requestNotifPermission();
-    }else if(perm==='granted'){
+    if(perm==='default'){requestNotifPermission()}
+    else if(perm==='granted'){
       var notifOn=DB.get('wb_notif_on',false);
-      if(notifOn){
-        unsubscribePush().then(function(){showToast('通知已关闭');updateNotifStatus()}).catch(function(e){showToast('关闭失败：'+e.message)});
-      }else{
-        subscribePush().then(function(ok){if(ok){showToast('推送已开启');updateNotifStatus()}else{showToast('推送开启失败，请重试')}}).catch(function(e){showToast('错误：'+e.message)});
-      }
-    }else{
-      showToast('通知被拒绝，请到浏览器设置中允许');
-    }
-  }catch(e){
-    showToast('铃铛错误：'+e.message);
-  }
+      if(notifOn){unsubscribePush().then(function(){showToast('通知已关闭');updateNotifStatus()})}
+      else{subscribePush().then(function(ok){if(ok){showToast('推送已开启');updateNotifStatus()}})}
+    }else{showToast('通知被拒绝，请到浏览器设置中重新允许')}
+  }catch(e){showToast('铃铛错误：'+e.message)}
 }
 function updateNotifStatus(){const btn=document.getElementById('notifBtn');if(!btn)return;btn.classList.remove('active');if(!('Notification' in window)){btn.textContent='🔕';btn.title='设备不支持通知';return}if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',false);if(notifOn){btn.textContent='🔔';btn.classList.add('active');btn.title='通知已开启，点击关闭'}else{btn.textContent='🔕';btn.title='通知已关闭，点击重新开启'}}else if(Notification.permission==='denied'){btn.textContent='🔕';btn.title='通知被拒绝'}else{btn.textContent='🔕';btn.title='点击开启通知'}}
+async function sendTestPush(){
+  var endpoint=DB.get('wb_push_endpoint','');
+  var keysStr=DB.get('wb_push_keys','');
+  if(!endpoint||!keysStr){showToast('请先点击🔔开启推送');return}
+  if(!PUSH_WORKER_URL){showToast('推送服务未配置');return}
+  showToast('正在发送测试推送...');
+  try{
+    var keys=JSON.parse(keysStr);
+    var res=await fetch(PUSH_WORKER_URL+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'测试通知 - 这是一条推送消息',endpoint:endpoint,keys:keys})});
+    var data=await res.json();
+    if(data.ok){showToast('测试推送已发送！请查看通知栏')}
+    else{showToast('推送失败：'+(data.error||data.body||'status '+data.status))}
+  }catch(e){showToast('请求失败：'+e.message)}
+}
 function getSyncConfig(){return{url:DB.get('wb_sync_url',''),key:DB.get('wb_sync_key',''),userKey:DB.get('wb_sync_user','')}}
 function isSyncConfigured(){const c=getSyncConfig();return c.url&&c.key&&c.userKey}
 function getSyncHeaders(){const c=getSyncConfig();return{'apikey':c.key,'Authorization':'Bearer '+c.key,'Content-Type':'application/json'}}
