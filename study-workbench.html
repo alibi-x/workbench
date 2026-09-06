@@ -545,7 +545,7 @@ const ONESIGNAL_REST_KEY='os_v2_app_jmbc45bjhjcbdfd4cy2szo6vhj7aucrzh6vudimzvhod
 function getOneSignalSubId(){return new Promise(resolve=>{if(!window.OneSignalDeferred){resolve(null);return}OneSignalDeferred.push(async function(OneSignal){let subId=OneSignal.User.PushSubscription.id;if(subId){resolve(subId);return}for(let i=0;i<24;i++){await new Promise(r=>setTimeout(r,500));subId=OneSignal.User.PushSubscription.id;if(subId){resolve(subId);return}}resolve(null)})})}
 async function schedulePushNotification(text,remindAt){const subId=await getOneSignalSubId();if(!subId){return null}const dt=new Date(remindAt);const sendAfter=dt.getUTCFullYear()+'-'+String(dt.getUTCMonth()+1).padStart(2,'0')+'-'+String(dt.getUTCDate()).padStart(2,'0')+' '+String(dt.getUTCHours()).padStart(2,'0')+':'+String(dt.getUTCMinutes()).padStart(2,'0')+':00';try{const res=await fetch('https://api.onesignal.com/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Key '+ONESIGNAL_REST_KEY},body:JSON.stringify({app_id:ONESIGNAL_APP_ID,target_channel:'push',headings:{en:'⏰ 待办提醒'},contents:{en:text},send_after:sendAfter,include_subscription_ids:[subId]})});const data=await res.json();return data.id||null}catch(e){return null}}
 async function cancelPushNotification(notifId){if(!notifId)return;try{await fetch('https://api.onesignal.com/notifications/'+notifId+'?app_id='+ONESIGNAL_APP_ID,{method:'DELETE',headers:{'Authorization':'Key '+ONESIGNAL_REST_KEY}})}catch(e){}}
-function connectPushService(){if(!window.OneSignalDeferred){showToast('推送服务未加载，请刷新页面重试');return}showToast('正在连接推送服务...');OneSignalDeferred.push(async function(OneSignal){try{await OneSignal.User.PushSubscription.optIn()}catch(e){}let subId=OneSignal.User.PushSubscription.id;let attempts=0;while(!subId&&attempts<24){await new Promise(r=>setTimeout(r,500));subId=OneSignal.User.PushSubscription.id;attempts++}if(subId){DB.set('wb_notif_on',true);showToast('推送服务连接成功！可以添加带提醒的待办了')}else{showToast('推送服务连接超时，请刷新页面重试')}updateNotifStatus()})}
+function connectPushService(){if(!window.OneSignalDeferred){showToast('推送服务未加载，请刷新页面重试');return}showToast('正在连接推送服务...');var done=false;var hardTimer=setTimeout(function(){if(!done){done=true;showToast('连接超时，请清除站点数据后重试（见说明）');updateNotifStatus()}},16000);OneSignalDeferred.push(function(OneSignal){console.log('[OneSignal] SDK ready, calling optIn...');try{OneSignal.User.PushSubscription.optIn()}catch(e){console.log('[OneSignal] optIn error:',e)}var attempts=0;var poll=setInterval(function(){attempts++;var subId=null;try{subId=OneSignal.User.PushSubscription.id}catch(e){}console.log('[OneSignal] poll #'+attempts+' subId='+subId);if(subId){done=true;clearTimeout(hardTimer);clearInterval(poll);DB.set('wb_notif_on',true);showToast('推送服务连接成功！可以添加带提醒的待办了');updateNotifStatus()}else if(attempts>=24){clearInterval(poll);if(!done){done=true;clearTimeout(hardTimer);console.log('[OneSignal] timed out. permission='+Notification.permission+' optedIn='+(OneSignal.User.PushSubscription.optedIn));showToast('连接超时，请清除站点数据后重试');updateNotifStatus()}}},500)})}
 function requestNotifPermission(){if(!('Notification' in window)){showToast('设备不支持通知');return}Notification.requestPermission().then(function(perm){if(perm==='granted'){connectPushService()}else{showToast('通知权限未开启');updateNotifStatus()}})}
 function updateNotifStatus(){const btn=document.getElementById('notifBtn');if(!btn)return;btn.onclick=null;btn.classList.remove('active');if(!('Notification' in window)){btn.textContent='🔕';btn.title='设备不支持通知';return}if(Notification.permission==='granted'){const notifOn=DB.get('wb_notif_on',true);if(notifOn){btn.textContent='🔔';btn.classList.add('active');btn.title='通知已开启，点击关闭';btn.onclick=function(){if(window.OneSignalDeferred){OneSignalDeferred.push(function(OneSignal){OneSignal.User.PushSubscription.optOut()})}DB.set('wb_notif_on',false);showToast('通知已关闭，将不再收到推送');updateNotifStatus()}}else{btn.textContent='🔕';btn.title='通知已关闭，点击重新开启';btn.onclick=connectPushService}}else if(Notification.permission==='denied'){btn.textContent='🔕';btn.title='通知被拒绝';btn.onclick=function(){showToast('请在浏览器设置 → 站点权限 中重新允许通知')}}else{btn.textContent='🔕';btn.title='点击开启通知';btn.onclick=requestNotifPermission}}
 function getSyncConfig(){return{url:DB.get('wb_sync_url',''),key:DB.get('wb_sync_key',''),userKey:DB.get('wb_sync_user','')}}
@@ -698,24 +698,33 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();docume
 function init(){renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updateNotifStatus()}
 init();
 // Auto-connect push service if permission granted but subscription not established
-setTimeout(function(){if(!window.OneSignalDeferred||!('Notification' in window)||Notification.permission!=='granted'||!DB.get('wb_notif_on',true))return;OneSignalDeferred.push(async function(OneSignal){if(!OneSignal.User.PushSubscription.id){connectPushService()}})},3000);
+setTimeout(function(){if(!window.OneSignalDeferred||!('Notification' in window)||Notification.permission!=='granted'||!DB.get('wb_notif_on',true))return;OneSignalDeferred.push(function(OneSignal){var subId=null;try{subId=OneSignal.User.PushSubscription.id}catch(e){}if(!subId){connectPushService()}})},3000);
 
-// Service Worker 注册（PWA 离线缓存）
+// Service Worker 注册（PWA 离线缓存 + OneSignal 推送）
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').then(reg=>{
-    reg.addEventListener('updatefound',()=>{
-      const nw=reg.installing;
+  // 清理旧的 push/ scope service worker
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(reg){
+      if(reg.scope && reg.scope.indexOf('/push/')>=0){
+        console.log('[SW] Unregistering old push SW:', reg.scope);
+        reg.unregister();
+      }
+    });
+  });
+  navigator.serviceWorker.register('./sw.js').then(function(reg){
+    reg.update();
+    reg.addEventListener('updatefound',function(){
+      var nw=reg.installing;
       if(nw){
-        nw.addEventListener('statechange',()=>{
+        nw.addEventListener('statechange',function(){
           if(nw.state==='installed' && navigator.serviceWorker.controller){
             showToast('工作台已更新，刷新页面生效');
           }
         });
       }
     });
-  }).catch(e=>console.log('SW registration failed:',e));
-  // 监听控制器变化，自动刷新
-  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+  }).catch(function(e){console.log('SW registration failed:',e)});
+  navigator.serviceWorker.addEventListener('controllerchange',function(){
     location.reload();
   });
 }
