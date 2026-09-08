@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1a1a1a">
 <link rel="manifest" href="./manifest.json">
-<link rel="icon" href="./cover-workbench-v2.png">
-<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-workbench-192.png">
+<link rel="apple-touch-icon" href="./icon-workbench-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,6 +44,12 @@ input,textarea,select,.plan-text,.review-item-title,.review-text-content,.sideba
 ::-webkit-scrollbar-thumb{background:var(--navy-300);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--navy-400)}
 
+.splash{position:fixed;inset:0;background:#0d0d0d;z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity .5s ease,visibility .5s ease}
+.splash.hide{opacity:0;visibility:hidden;pointer-events:none}
+.splash img{width:min(72vw,460px);height:auto;border-radius:24px;box-shadow:0 0 60px rgba(236,72,153,.35);animation:splashPop .6s cubic-bezier(.34,1.56,.64,1)}
+@keyframes splashPop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.splash-loading{position:absolute;bottom:9vh;font-size:12px;color:var(--navy-400);letter-spacing:2px}
+
 .topbar{background:var(--navy-900);color:#fff;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200}
 .topbar-brand{font-size:17px;font-weight:600;letter-spacing:.5px}
 .topbar-nav{display:flex;gap:2px}
@@ -65,8 +71,6 @@ input,textarea,select,.plan-text,.review-item-title,.review-text-content,.sideba
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 .home-layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 56px)}
-.cover-banner{grid-column:1/-1;padding:16px 24px 0}
-.cover-banner img{width:100%;max-height:240px;object-fit:cover;border-radius:var(--radius-lg);border:2px solid var(--blue-400);box-shadow:0 8px 24px rgba(236,72,153,.18);display:block;user-select:none;-webkit-user-drag:none}
 .countdown-section{grid-column:1/-1;background:var(--navy-800);padding:20px 24px;display:flex;gap:16px;overflow-x:auto;border-bottom:1px solid var(--navy-700)}
 .countdown-card{background:var(--navy-700);border:1px solid var(--navy-600);border-radius:var(--radius-lg);padding:16px 24px;min-width:180px;cursor:pointer;transition:var(--transition);display:flex;flex-direction:column;gap:4px}
 .countdown-card:hover{border-color:var(--blue-400);background:var(--navy-600)}
@@ -327,10 +331,12 @@ select.input{cursor:pointer}
 .checkin-cal-item .miss{background:var(--navy-300)}
 
 @media(max-width:900px){.topbar{padding:0 10px}.topbar-brand{display:none}.topbar-nav{overflow-x:auto;flex:1;-webkit-overflow-scrolling:touch;scrollbar-width:none}.topbar-nav::-webkit-scrollbar{display:none}.home-layout{grid-template-columns:1fr}.sidebar{position:fixed;top:56px;left:0;bottom:0;width:240px;z-index:300;transform:translateX(-100%);transition:transform .25s ease;box-shadow:var(--shadow-lg)}.sidebar.show{transform:translateX(0)}.sidebar-toggle{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card-bg);cursor:pointer;font-size:16px;color:var(--text-secondary);flex-shrink:0}.sidebar-overlay{display:none;position:fixed;inset:56px 0 0 0;background:rgba(0,0,0,.4);z-index:250}.sidebar-overlay.show{display:block}.review-grid{grid-template-columns:1fr}.dash-stats{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:600px){.topbar{padding:0 8px}.topbar-nav-item{padding:6px 10px;font-size:12px;white-space:nowrap}.topbar-tools .version-tag{display:none}.tool-btn{width:26px;height:26px;font-size:14px}.cover-banner{padding:10px 8px 0}.cover-banner img{max-height:150px;border-radius:var(--radius)}.countdown-section{padding:12px;gap:10px}.countdown-card,.countdown-card-add{min-width:140px;padding:12px 16px}.countdown-card-days{font-size:28px}.countdown-sub-card,.countdown-sub-card-add{min-width:100px;padding:6px 10px}.countdown-sub-card-days{font-size:18px}.main-content{padding:16px}.dash-stats{grid-template-columns:repeat(2,1fr)}.checkin-page{padding:16px}.modal{padding:16px;max-width:94vw}.review-filter-bar{padding:8px 10px}.review-filter-bar select{min-width:80px}.plan-input-row{flex-wrap:wrap}.cal-day-events{font-size:10px}}
+@media(max-width:600px){.topbar{padding:0 8px}.topbar-nav-item{padding:6px 10px;font-size:12px;white-space:nowrap}.tool-btn{width:26px;height:26px;font-size:14px}.countdown-section{padding:12px;gap:10px}.countdown-card,.countdown-card-add{min-width:140px;padding:12px 16px}.countdown-card-days{font-size:28px}.countdown-sub-card,.countdown-sub-card-add{min-width:100px;padding:6px 10px}.countdown-sub-card-days{font-size:18px}.main-content{padding:16px}.dash-stats{grid-template-columns:repeat(2,1fr)}.checkin-page{padding:16px}.modal{padding:16px;max-width:94vw}.review-filter-bar{padding:8px 10px}.review-filter-bar select{min-width:80px}.plan-input-row{flex-wrap:wrap}.cal-day-events{font-size:10px}}
 </style>
 </head>
 <body>
+
+<div class="splash" id="splash"><img src="./cover-workbench-v2.png" alt="工作台"><div class="splash-loading">工作台 · 加载中</div></div>
 
 <div class="topbar">
   <div class="topbar-brand">工作台</div>
@@ -353,7 +359,6 @@ select.input{cursor:pointer}
 
 <div class="page active" id="page-home">
   <div class="home-layout">
-    <div class="cover-banner"><img src="./cover-workbench-v2.png" alt="封面" draggable="false"></div>
     <div class="countdown-section" id="countdownSection"></div>
     <div class="sidebar" id="sidebar"></div>
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
@@ -705,6 +710,23 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();docume
 /* 初始化 */
 function init(){try{rolloverPlans();renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updatePushStatus()}catch(e){console.error('init error:',e)}}
 init();
+
+// 开屏页面：封面图短暂展示后淡出进入工作台
+(function(){
+  var splash=document.getElementById('splash');
+  if(!splash)return;
+  var minShown=900,started=Date.now();
+  function hide(){
+    var elapsed=Date.now()-started;
+    var wait=Math.max(0,minShown-elapsed);
+    setTimeout(function(){
+      splash.classList.add('hide');
+      setTimeout(function(){if(splash.parentNode)splash.parentNode.removeChild(splash)},600);
+    },wait);
+  }
+  var img=splash.querySelector('img');
+  if(img.complete){hide()}else{img.onload=hide;img.onerror=hide}
+})();
 
 // Service Worker 注册（PWA 离线缓存 + Web Push 推送）
 if('serviceWorker' in navigator){

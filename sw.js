@@ -1,10 +1,11 @@
-const CACHE_VERSION = 'v2.0.0';
+const CACHE_VERSION = 'v2.1.0';
 const CACHE_NAME = 'workbench-' + CACHE_VERSION;
 const ASSETS = [
   './study-workbench.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  './cover-workbench-v2.png',
+  './icon-workbench-192.png',
+  './icon-workbench-512.png'
 ];
 
 // 安装：预缓存核心文件
@@ -61,8 +62,8 @@ self.addEventListener('push', e => {
   e.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: './icon-192.png',
-      badge: './icon-192.png',
+      icon: './icon-workbench-192.png',
+      badge: './icon-workbench-192.png',
       tag: payload.tag || 'workbench-todo',
       data: { url: payload.url || './study-workbench.html' },
       vibrate: [200, 100, 200],
