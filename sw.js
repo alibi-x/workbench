@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v2.1.0';
+const CACHE_VERSION = 'v2.2.0';
 const CACHE_NAME = 'workbench-' + CACHE_VERSION;
 const ASSETS = [
   './study-workbench.html',
