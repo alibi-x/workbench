@@ -377,7 +377,7 @@ select.input{cursor:pointer}
     <button class="tool-btn" id="notifBtn" title="企微提醒" onclick="togglePush()">🔔</button>
     <button class="tool-btn" id="testPushBtn" title="发送测试推送到微信" onclick="sendTestPush()">📡</button>
     <button class="tool-btn" id="syncBtn" title="云同步" onclick="syncMenu()">☁️</button>
-    <span class="version-tag">v3.6</span>
+    <span class="version-tag">v3.7</span>
   </div>
 </div>
 
@@ -560,7 +560,7 @@ select.input{cursor:pointer}
 <div class="toast" id="toast"></div>
 
 <script>
-const DB={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));if(_inited&&k.indexOf('wb_')===0&&k!=='wb_sync_last')scheduleAutoSync()}catch(e){showToast('存储空间不足，请清理旧数据')}}};
+const DB={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));if(_inited&&!_restoring&&k.indexOf('wb_')===0&&k!=='wb_sync_last')scheduleAutoSync()}catch(e){showToast('存储空间不足，请清理旧数据')}}};
 function todayKey(d){d=d||new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function dateKey(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function addDays(ds,n){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return dateKey(d)}
@@ -586,7 +586,7 @@ function getSyncHeaders(){const c=getSyncConfig();return{'apikey':c.key,'Authori
 function updateSyncStatus(){const btn=document.getElementById('syncBtn');if(!btn)return;if(!isSyncConfigured()){btn.classList.remove('synced');btn.title='同步未配置，点击设置'}else{btn.classList.add('synced');btn.title='同步已连接，点击打开同步菜单'}}
 function syncMenu(){if(!isSyncConfigured()){showSyncConfigModal();return}showModal({title:'☁️ 云同步',body:`<div style="text-align:center;padding:12px 0;"><p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;">选择同步操作，数据将通过加密连接传输</p><div style="display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto;"><button class="btn btn-primary" onclick="syncUpload()" style="padding:10px;">⬆️ 上传到云端</button><button class="btn btn-secondary" onclick="syncDownload()" style="padding:10px;">⬇️ 从云端拉取</button><button class="btn btn-ghost" onclick="showSyncConfigModal()" style="padding:10px;">⚙️ 同步设置</button></div></div>`,actions:[{text:'关闭',cls:'btn-secondary',onClick:closeModal}]})}
 function showSyncConfigModal(){const c=getSyncConfig();showModal({title:'⚙️ 同步设置',body:`<div class="form-group"><label>Supabase API URL</label><input type="text" class="input" id="syncUrl" value="${escapeHtml(c.url)}" placeholder="https://xxx.supabase.co/rest/v1"></div><div class="form-group"><label>Publishable Key</label><input type="text" class="input" id="syncKey" value="${escapeHtml(c.key)}" placeholder="sb_publishable_..."></div><div class="form-group"><label>同步密码（用于区分你的数据）</label><input type="text" class="input" id="syncUser" value="${escapeHtml(c.userKey)}" placeholder="自定义一个密码，两端需一致"></div><p style="font-size:12px;color:var(--text-muted);margin-top:8px;">密码自定义即可，两端设备填同样的密码才能同步同一份数据。配置仅存在本地浏览器。</p>`,actions:[{text:'取消',cls:'btn-secondary',onClick:closeModal},{text:'保存',cls:'btn-primary',onClick:()=>{const u=document.getElementById('syncUrl').value.trim().replace(/\/$/,'');const k=document.getElementById('syncKey').value.trim();const un=document.getElementById('syncUser').value.trim();if(!u||!k||!un){showToast('请填写完整');return}DB.set('wb_sync_url',u);DB.set('wb_sync_key',k);DB.set('wb_sync_user',un);closeModal();updateSyncStatus();showToast('配置已保存')}}]})}
-let _autoSyncTimer=null,_autoSyncing=false,_inited=false;function scheduleAutoSync(){if(!isSyncConfigured())return;if(_autoSyncTimer)clearTimeout(_autoSyncTimer);_autoSyncTimer=setTimeout(function(){_autoSyncTimer=null;if(_autoSyncing)return;_autoSyncing=true;syncUpload({silent:true}).catch(function(){}).finally(function(){_autoSyncing=false})},1500)}async function syncUpload(opts){const silent=opts&&opts.silent;const c=getSyncConfig();if(!isSyncConfigured()){if(!silent)showToast('请先配置同步');return}const btn=document.getElementById('syncBtn');if(!silent&&btn){btn.innerHTML='<span class="sync-spin"></span>';btn.disabled=true}try{const allData={};SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v)allData[k]=JSON.parse(v)});const checkRes=await fetch(`${c.url}/workbench_data?user_key=eq.${encodeURIComponent(c.userKey)}&select=id`,{headers:getSyncHeaders()});const existing=await checkRes.json();if(checkRes.ok&&existing.length>0){const upRes=await fetch(`${c.url}/workbench_data?user_key=eq.${encodeURIComponent(c.userKey)}`,{method:'PATCH',headers:{...getSyncHeaders(),'Prefer':'return=minimal'},body:JSON.stringify({data:allData,updated_at:new Date().toISOString()})});if(!upRes.ok)throw new Error('上传失败')}else{const inRes=await fetch(`${c.url}/workbench_data`,{method:'POST',headers:{...getSyncHeaders(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:c.userKey,data:allData})});if(!inRes.ok)throw new Error('上传失败')}DB.set('wb_sync_last',new Date().toISOString());if(!silent)showToast('✅ 已上传到云端')}catch(e){showToast(silent?'❌ 自动同步失败：'+e.message+'，可点击☁️手动同步':'❌ 同步失败：'+e.message)}finally{if(!silent&&btn){btn.innerHTML='☁️';btn.disabled=false;updateSyncStatus()}}}
+let _autoSyncTimer=null,_autoSyncing=false,_inited=false,_restoring=false;function scheduleAutoSync(){if(!isSyncConfigured())return;if(_autoSyncTimer)clearTimeout(_autoSyncTimer);_autoSyncTimer=setTimeout(function(){_autoSyncTimer=null;if(_autoSyncing)return;_autoSyncing=true;syncUpload({silent:true}).catch(function(){}).finally(function(){_autoSyncing=false})},1500)}async function syncUpload(opts){const silent=opts&&opts.silent;const c=getSyncConfig();if(!isSyncConfigured()){if(!silent)showToast('请先配置同步');return}const btn=document.getElementById('syncBtn');if(!silent&&btn){btn.innerHTML='<span class="sync-spin"></span>';btn.disabled=true}try{const allData={};SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v)allData[k]=JSON.parse(v)});if(Object.keys(allData).length===0){if(!silent)showToast('⚠️ 本地暂无数据，已取消上传（云端数据不受影响）');return}const checkRes=await fetch(`${c.url}/workbench_data?user_key=eq.${encodeURIComponent(c.userKey)}&select=id`,{headers:getSyncHeaders()});const existing=await checkRes.json();if(checkRes.ok&&existing.length>0){const upRes=await fetch(`${c.url}/workbench_data?user_key=eq.${encodeURIComponent(c.userKey)}`,{method:'PATCH',headers:{...getSyncHeaders(),'Prefer':'return=minimal'},body:JSON.stringify({data:allData,updated_at:new Date().toISOString()})});if(!upRes.ok)throw new Error('上传失败')}else{const inRes=await fetch(`${c.url}/workbench_data`,{method:'POST',headers:{...getSyncHeaders(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:c.userKey,data:allData})});if(!inRes.ok)throw new Error('上传失败')}DB.set('wb_sync_last',new Date().toISOString());if(!silent)showToast('✅ 已上传到云端')}catch(e){showToast(silent?'❌ 自动同步失败：'+e.message+'，可点击☁️手动同步':'❌ 同步失败：'+e.message)}finally{if(!silent&&btn){btn.innerHTML='☁️';btn.disabled=false;updateSyncStatus()}}}
 async function syncDownload(){const c=getSyncConfig();if(!isSyncConfigured()){showToast('请先配置同步');return}const btn=document.getElementById('syncBtn');btn.innerHTML='<span class="sync-spin"></span>';btn.disabled=true;try{const res=await fetch(`${c.url}/workbench_data?user_key=eq.${encodeURIComponent(c.userKey)}&select=data,updated_at`,{headers:getSyncHeaders()});const rows=await res.json();if(!res.ok)throw new Error('拉取失败');if(rows.length===0){showToast('云端暂无数据');return}const cloudData=rows[0].data;if(!cloudData){showToast('云端数据为空');return}Object.keys(cloudData).forEach(k=>{if(SYNC_KEYS.includes(k))DB.set(k,cloudData[k])});DB.set('wb_sync_last',new Date().toISOString());showToast('✅ 已从云端恢复，正在刷新...');setTimeout(()=>location.reload(),1500)}catch(e){showToast('❌ 拉取失败：'+e.message);btn.innerHTML='☁️';btn.disabled=false}}
 const EBBI_DAYS=[1,2,4,7,15,30];
 
@@ -757,7 +757,25 @@ document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();document.getElementById('imgModal').classList.remove('show')}});
 
 /* 初始化 */
-function init(){try{rolloverPlans();cleanupShop();renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updatePushStatus();_inited=true;scheduleAutoSync()}catch(e){console.error('init error:',e)}}
+function hasLocalData(){try{return SYNC_KEYS.some(k=>localStorage.getItem(k)!==null)}catch(e){return true}}
+/* 清空本地缓存后自动从云端恢复（静默，不覆盖云端） */
+async function autoRestore(){
+  try{
+    const c=getSyncConfig();
+    if(!isSyncConfigured())return;
+    const res=await fetch(`${c.url}/workbench_data?user_key=eq.${encodeURIComponent(c.userKey)}&select=data,updated_at`,{headers:getSyncHeaders()});
+    const rows=await res.json();
+    if(!res.ok||rows.length===0)return;
+    const cloudData=rows[0].data;
+    if(!cloudData)return;
+    _restoring=true;
+    Object.keys(cloudData).forEach(k=>{if(SYNC_KEYS.includes(k))DB.set(k,cloudData[k])});
+    _restoring=false;
+    DB.set('wb_sync_last',new Date().toISOString());
+    renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updatePushStatus();
+  }catch(e){_restoring=false;console.error('autoRestore error:',e)}
+}
+function init(){try{rolloverPlans();cleanupShop();renderCountdowns();renderSidebar();renderPlans();renderShop();renderLinks();calSelectedDate=todayKey();renderCalendar();renderReview();renderCheckin();renderDashboard();updateSyncStatus();updatePushStatus();_inited=true;if(isSyncConfigured()&&!hasLocalData())autoRestore()}catch(e){console.error('init error:',e)}}
 init();
 
 // 开屏页面：封面图短暂展示后淡出进入工作台
